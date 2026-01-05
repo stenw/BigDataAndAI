@@ -1,15 +1,15 @@
 ---
-  title: "Practical 2: Gradient Boosting in Epidemiology"
+title: "Practical 2: Gradient Boosting in Epidemiology"
 subtitle: "Tuning, cross-validation, nested CV, and interpretation"
 author: "Sten Willemsen"
 format:
   html:
-  toc: true
-toc-depth: 3
+    toc: true
+    toc-depth: 3
 execute:
   echo: true
-warning: false
-message: false
+  warning: false
+  message: false
 ---
   
 ## Learning objectives
@@ -253,8 +253,8 @@ autoplot(boost_tuned)
 
 Select best configuration (by ROC AUC):
   
-  ```{r}
-best_boost <- select_best(boost_tuned, "roc_auc")
+```{r selectbestboost}
+best_boost <- select_best(boost_tuned, metric="mn_log_loss")
 best_boost
 ```
 
@@ -292,7 +292,7 @@ cv_outer <- vfold_cv(analysis_df, v = 3)
 
 Nested CV implementation:
   
-```{r}
+```{r cvboost}
 nested_results <- cv_outer %>%
   mutate(
     inner_cv = map(splits, ~ vfold_cv(analysis(.x), v = 3)),
@@ -303,12 +303,12 @@ nested_results <- cv_outer %>%
                     boost_wf,
                     resamples = .x,
                     grid = boost_grid,
-                    metrics = metric_set(roc_auc, brier_class)
+                    metrics = metric_set(roc_auc, brier_class, mn_log_loss)
                   )
     ),
     
     # choose best by AUC (you can switch to brier_class if you prefer)
-    best = map(tuned, select_best, "roc_auc"),
+    best = map(tuned, select_best, metric="mn_log_loss"),
     final_wf = map(best, ~ finalize_workflow(boost_wf, .x)),
     
     # fit on outer analysis fold
@@ -317,12 +317,11 @@ nested_results <- cv_outer %>%
     # predict on outer assessment fold
     assessed = map2(
       fitted, splits,
-      ~ predict(.x, assessment(.y), type = "prob") %>%
-        bind_cols(assessment(.y))
+      \(x, y) predict(x, assessment(y), type = "prob") %>%
+        bind_cols(assessment(y))
     ),
-    
-    auc = map_dbl(assessed, roc_auc, truth = diabetes, .pred_1),
-    brier = map_dbl(assessed, brier_class, truth = diabetes, .pred_1)
+    auc = map_dbl(assessed, \(x) roc_auc(x, truth = diabetes, .pred_1)$.estimate),
+    brier = map_dbl(assessed, \(x) brier_class(x, truth = diabetes, .pred_1) %>% dplyr::pull(.estimate))
   )
 ```
 
@@ -406,9 +405,9 @@ lasso_wf <- workflow() %>%
   add_model(lasso_spec)
 ```
 
-Small λ grid:
+Small lambda grid:
   
-  ```{r}
+```{r}
 lambda_grid <- grid_regular(
   penalty(range = c(-4, 0)),
   levels = 25
@@ -417,18 +416,18 @@ lambda_grid <- grid_regular(
 
 Nested CV for LASSO (AUC only, to keep runtime modest):
   
-  ```{r}
+```{r lassofit}
 set.seed(2025)
 lasso_nested <- cv_outer %>%
   mutate(
     inner_cv = map(splits, ~ vfold_cv(analysis(.x), v = 5)),
     tuned = map(inner_cv, ~ tune_grid(lasso_wf, resamples = .x, grid = lambda_grid,
-                                      metrics = metric_set(roc_auc))),
-    best = map(tuned, select_best, "roc_auc"),
+                                      metrics = metric_set(roc_auc, mn_log_loss))),
+    best = map(tuned, \(x) select_best(x, metric="mn_log_loss") ),
     final_wf = map(best, ~ finalize_workflow(lasso_wf, .x)),
     fitted = map2(final_wf, splits, ~ fit(.x, analysis(.y))),
     assessed = map2(fitted, splits, ~ predict(.x, assessment(.y), type = "prob") %>% bind_cols(assessment(.y))),
-    auc = map_dbl(assessed, roc_auc, truth = diabetes, .pred_1)
+    auc = map_dbl(assessed, \(x) roc_auc(x, truth = diabetes, .pred_1)$.estimate)
   )
 
 mean(lasso_nested$auc)

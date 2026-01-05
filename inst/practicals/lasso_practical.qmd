@@ -31,7 +31,6 @@ We use **tidymodels** to ensure a consistent modeling workflow.
 ```{r}
 library(tidymodels)
 library(dplyr)
-#library(readr)
 
 set.seed(2025)
 
@@ -132,16 +131,81 @@ glimpse(analysis_df)
 ```
 
 **Think:**  
-  Why might a standard logistic regression struggle with this many correlated predictors?
+- Why might a standard logistic regression struggle with this many correlated predictors, especially in smaller data sets ?
+  
+## 3. Train/test split 
+
+To avoid information leakage and bias, data that is used for modelling cannot be used for evaluation of those models. We must therefore split the data. The package `rsample` helps us with this. Here we spit the data in train and test sets using the `initial_split` function. We can extract the training and testing data sets with the functions: `training` and `testing`. The test set is held out for final evaluation only. 
+Here we use simple random sampling to split the data, but stratified sampling (e.g. `strata = "diabetes"`) is often preferred to ensure balanced class proportions in classification problems.
+
+Other strategies for data splitting are available within the `rsample` package.
+  
+```{r splitdata}
+set.seed(2025)
+split <- rsample::initial_split(analysis_df, prop = 0.75)
+train_data <- rsample::training(split)
+test_data  <- rsample::testing(split)
+```
+
+Examine the resulting objects and the documentation of the `initial_split()` function to understand how the data is divided.
+
+**Discussion:**  
+  What goes wrong if we use the test set to choose lambda?
   
   ---
   
-  ## 3. Preprocessing recipe
+
+## 4. LASSO model specification
+
+There are countless packages on CRAN that provide modelling functions implementing various types of models. Unfortunately, the interfaces of these functions are all different in how the data is passed to them (some expect `data.frames`, some `matrices`) and in terms of their arguments. The same is true for the predict methods of those functions (if they are implemented in the first place). The goal of the `parsnip` package within the tidymodels framework is to make this more unified so that users do not have to worry about the implementation. However as we will see later when we deal with neural networks, sometimes we still need to do some work to make certain packages behave the way the tidyverse expects them to. 
+
+We now define a **logistic regression model**. As you see a distinction is made between the type of model (here `logistic_reg`) and the engine: (`glm`) is the software backend that actually fits the specified model using numerical algorithms.  
+
+the underlying The model is specified but **not fitted yet**—it acts as a blueprint for later estimation. 
+
+```{r}
+lr_spec <- parsnip::logistic_reg() %>%
+  parsnip::set_engine("glm")
+
+lr_spec
+```
+
+When we have specified the model we can use the `fit()` function that will work the same for all kinds of models.
+
+
+```{r}
+lr_fit <- lr_spec |> 
+  fit(diabetes ~ ., data=train_data)
+```
+
+Now we have fit the model to the training data. We can use the `predict()` function to generate predictions on new data or use the `tidy` function from the `broom` package to get a summary.
+
+```{r}
+predict(lr_fit, new_data=test_data[1:4,])
+broom::tidy(lr_fit)
+```
+
+We now switch to lasso and introduce a penalty. We therefore switch the engine to `glmnet` which implements various types of penalized regression models including lasso and Ridge regression. 
+Larger values of the parameter lambda lead to more shrinkage and fewer predictors in the model.  
+`mixture = 1` specifies **pure LASSO** (L1 penalty), which performs automatic variable selection.  
+The **engine** We want to optimize the value of lambda via cross-validation. Therefore we change the `penalty` argument to `tune()`.  This  means the strength of the LASSO penalty (lambda) will be **chosen by cross-validation**, not fixed in advance. 
   
-  Key ideas:
-  - LASSO is **scale-dependent**
-  - Dummy variables increase dimensionality
-- Preprocessing must be *inside* resampling
+```{r defspec}
+lasso_spec <- parsnip::logistic_reg(
+  penalty = tune(),   # lambda to be tuned
+  mixture = 1         # pure LASSO
+) %>%
+  parsnip::set_engine("glmnet")
+
+lasso_spec
+```
+
+
+## 5. Preprocessing recipe
+
+Before fitting the model, we need to preprocess the data. This includes handling missing data, creating dummy variables for categorical predictors, and normalizing numeric predictors (as lasso is **scale-dependent**). We use the `recipes` package to define a preprocessing **recipe**. Preprocessing must generally done be *inside* resampling as it often learns parameters from the data (e.g., means and standard deviations for normalization). As such they can be seen as part of the whole modelling process. To be able to do a proper validation of the model no data dependent step must be excluded or we risk bias due to information leakage. 
+
+The recipe defines the steps to be taken but does not apply them yet. When we want to apply the recipe we use the `prep()` function to learn any required parameters from the training data, and then the `bake()` function to apply the learned transformations to new data (see later on).
 
 ```{r}
 lasso_recipe <- recipe(diabetes ~ ., data = analysis_df) %>%
@@ -162,52 +226,19 @@ In inferential statistics we often use multiple imputation to handle missingness
 - In `step_dummy` we use `one_hot = TRUE`. This makes indicator variables for all categories. Why is this no problem here?
 - Why is normalization essential for LASSO but not strictly necessary for ordinary logistic regression? What would happen when we normalize on the whole data set?
 - In a setting where we would have 1.000 observations would you use all these variables? What would happen to the standard errors.
+
+
+
   
----
-  
-## 4. LASSO model specification
+## 6. Cross-validation for tuning lambda
 
-We now defines a **logistic regression model with a LASSO penalty** using the `tidymodels` framework. The model is specified but **not fitted yet**—it acts as a blueprint for later estimation. `penalty = tune()` means the strength of the LASSO penalty (λ) will be **chosen by cross-validation**, not fixed in advance.  
-Larger values of λ lead to more shrinkage and fewer predictors in the model.  
-`mixture = 1` specifies **pure LASSO** (L1 penalty), which performs automatic variable selection.  
-The **engine** (`glmnet`) is the software backend that actually fits the specified model using numerical algorithms.  `glmnet` is a standard and efficient implementation (package) for penalized regression.  
-  
-```{r}
-lasso_spec <- logistic_reg(
-  penalty = tune(),   # λ
-  mixture = 1         # pure LASSO
-) %>%
-  set_engine("glmnet")
-
-lasso_spec
-```
-
-
-## 5. Train/test split (why this is not enough)
-
-We spit the data in train and test sets. The test set is held out for final evaluation only.
-  
-```{r splitdata}
-set.seed(2025)
-split <- initial_split(analysis_df, prop = 0.75)
-train_data <- training(split)
-test_data  <- testing(split)
-```
-
-Examine the resulting objects and the documentation of the `initial_split()` function to understand how the data is divided.
-
-**Discussion:**  
-  What goes wrong if we use the test set to choose λ?
-  
-  ---
-  
-## 6. Cross-validation for tuning λ
+Do find the best value of the hyperparameter lambda, we also need validation data. Therefore, we further divde the training data into folds for cross-validation. This is because we cannot use the same data for tuning as for testing. For this we use the `vfold_cv` function. 
   
 ### Inner cross-validation
   
 ```{r setup_cv_inner}
 set.seed(2025)
-cv_inner <- vfold_cv(train_data, v = 5)
+cv_inner <- rsample::vfold_cv(train_data, v = 5)
 ```
 
 ### Workflow
@@ -279,6 +310,7 @@ final_lasso <- finalize_workflow(
 
 final_fit <- fit(final_lasso, train_data)
 ```
+
 
 ```{r}
 test_pred <- predict(final_fit, test_data, type = "prob") %>%
@@ -353,8 +385,8 @@ nested_results <- cv_outer %>%
     fitted = map2(final_wf, splits, \(x, y) fit(x, analysis(y))),
     assessed = map2(
       fitted, splits,
-      ~ predict(.x, assessment(.y), type = "prob") %>%
-        bind_cols(assessment(.y))
+      \(x, y) predict(x, assessment(y), type = "prob") %>%
+        bind_cols(assessment(y))
     ),
     auc = map_dbl(
       assessed,
@@ -433,11 +465,11 @@ Note that there are also other ways to properly evaluate the model performance, 
 
 ## 10. Variable selection instability
 
-We use `extract_fit_parsnip` to extract the model fit from each outer fold, then `tidy` to get the coefficients. We filter out the intercept and zero estimates, then pull the variable names. Finally, we tabulate how often each variable was selected across the outer folds.
+We use `extract_fit_parsnip` to extract the model fit from each outer fold, then we use the `tidy` function from the `broom` package to get the coefficients. We filter out the intercept and zero estimates, then pull the variable names. Finally, we tabulate how often each variable was selected across the outer folds.
   
 ```{r showmodelstab}
 extract_vars <- function(fit) {
-  tidy(extract_fit_parsnip(fit)) %>%
+  broom::tidy(extract_fit_parsnip(fit)) %>%
     filter(term != "(Intercept)", estimate != 0) %>%
     pull(term)
 }

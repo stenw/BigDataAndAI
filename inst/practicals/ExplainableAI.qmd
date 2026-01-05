@@ -103,7 +103,11 @@ analysis_df <- nhanes %>%
   )
 ```
 
-## 2. Fit a boosted model (quick, guided)
+## 2. Introduction
+
+Many machine learning models are described as black-box models because their internal workings are complex and not easily interpretable by humans. This lack of transparency can be problematic, especially in fields like healthcare, where understanding the reasoning behind a model's predictions is crucial for trust, accountability, and ethical considerations. Because of this , there is a growing interest in Explainable AI (XAI) techniques (also called Interpretable machine learning (IML)) that aim to make these models more interpretable.
+
+## 3. Fit a boosted model (quick, guided)
 
 To focus on XAI, we fit a **reasonable** boosted tree model without lengthy tuning.
 (You can swap these settings for your tuned values from Practical 2.)

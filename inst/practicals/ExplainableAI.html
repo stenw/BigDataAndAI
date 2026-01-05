@@ -82,7 +82,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#learning-objectives" id="toc-learning-objectives" class="nav-link active" data-scroll-target="#learning-objectives">Learning objectives</a></li>
   <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">1. Setup</a></li>
-  <li><a href="#fit-a-boosted-model-quick-guided" id="toc-fit-a-boosted-model-quick-guided" class="nav-link" data-scroll-target="#fit-a-boosted-model-quick-guided">2. Fit a boosted model (quick, guided)</a>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link" data-scroll-target="#introduction">2. Introduction</a></li>
+  <li><a href="#fit-a-boosted-model-quick-guided" id="toc-fit-a-boosted-model-quick-guided" class="nav-link" data-scroll-target="#fit-a-boosted-model-quick-guided">3. Fit a boosted model (quick, guided)</a>
   <ul class="collapse">
   <li><a href="#recipe" id="toc-recipe" class="nav-link" data-scroll-target="#recipe">Recipe</a></li>
   <li><a href="#workflow-model" id="toc-workflow-model" class="nav-link" data-scroll-target="#workflow-model">Workflow + model</a></li>
@@ -227,8 +228,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">2. Introduction</h2>
+<p>Many machine learning models are described as black-box models because their internal workings are complex and not easily interpretable by humans. This lack of transparency can be problematic, especially in fields like healthcare, where understanding the reasoning behind a model’s predictions is crucial for trust, accountability, and ethical considerations. Because of this , there is a growing interest in Explainable AI (XAI) techniques (also called Interpretable machine learning (IML)) that aim to make these models more interpretable.</p>
+</section>
 <section id="fit-a-boosted-model-quick-guided" class="level2">
-<h2 class="anchored" data-anchor-id="fit-a-boosted-model-quick-guided">2. Fit a boosted model (quick, guided)</h2>
+<h2 class="anchored" data-anchor-id="fit-a-boosted-model-quick-guided">3. Fit a boosted model (quick, guided)</h2>
 <p>To focus on XAI, we fit a <strong>reasonable</strong> boosted tree model without lengthy tuning. (You can swap these settings for your tuned values from Practical 2.)</p>
 <section id="recipe" class="level3">
 <h3 class="anchored" data-anchor-id="recipe">Recipe</h3>
