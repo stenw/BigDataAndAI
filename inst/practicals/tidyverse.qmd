@@ -1,0 +1,178 @@
+---
+title: "Practical 0: R using the tidyverse"
+subtitle: "Overfitting, tuning, and (nested) cross-validation"
+author: "Sten Willemsen"
+format:
+  html:
+    toc: true
+toc-depth: 3
+execute:
+  echo: true
+warning: false
+message: false
+---
+  
+## Learning objectives
+  
+After this practical, you should be able to:
+  
+- Explain what the tidyverse is and why it is often used in modern R data science and machine-learning workflows
+- Apply the pipe operator (%>% or |> ) to express data-analysis steps clearly and sequentially.
+- Read and understand data-manipulation pipelines built with tidyverse verbs.
+- Use core dplyr verbs (select, filter, mutate, group_by, summarise, count) to prepare clinical data for modeling.
+
+
+## 1. Introduction
+
+The tidyverse is a collection of R packages designed for data science.
+It provides a consistent grammar for working with data, built around the idea that:
+- Data analysis is a sequence of small, readable transformations.
+
+Key tidyverse packages used in this course include:
+- tibble – modern data frames
+- dplyr – data manipulation (filtering, selecting, summarising)
+- tidyr – reshaping data
+- ggplot2 – visualization
+- purrr – functional programming (repeating analyses safely)
+
+Tidymodels is a collection of packages for modeling and machine learning using tidyverse principles. Because of this it is good the spend a little time getting familiar with the tidyverse first.
+
+In this practical we use the `Pima Indians Diabetes Database` (Smith et al (1988)). This data set from the National Institute of Diabetes and Digestive and Kidney Diseases and contains data from a population of Pima Indian women who live near Phoenix, Arizona. It contains clinical measurements (glucose, BMI, blood pressure, age, etc.) and a binary outcome indicating whether a patient has diabetes. It’s a well-known and commonly used data set of a very manageable size, making it ideal for practicing data analysis and machine learning techniques.
+
+```{r}
+library(tidyverse)
+
+diabetes <- read_csv(
+  "https://raw.githubusercontent.com/plotly/datasets/master/diabetes.csv"
+) %>%
+  mutate(
+    Outcome = factor(Outcome, labels = c("No diabetes", "Diabetes"))
+  )
+```
+
+
+## 2. The pipe operator
+The pipe operator (`%>%` from the `magrittr` package, or `|>` in base R) allows you to chain together multiple operations in a clear and readable way. Instead of nesting functions, you can express a sequence of operations linearly. The pipe operator evaluates what is on the left hand side and uses it as the first argument of the function on the right hand side.
+This allows us to write code like:
+```{r}
+summarise(
+  group_by(
+    filter(diabetes, BMI > 10),
+    Outcome
+  ),
+  mean_glucose = mean(Glucose)
+)
+
+```
+
+as
+
+```{r}
+diabetes %>%
+  filter(BMI > 10) %>%
+  group_by(Outcome) %>%
+  summarise(mean_glucose = mean(Glucose))
+```
+
+This is often easier to read and understand, especially for longer sequences of operations. Do not worry if you don't know these functions, they will be discussed below. The sequence of operations that are chained together in this way is called a pipe.
+
+## 3. Tibbles
+
+A `tibble` is the tidyverse’s modern version of a data frame. In most cases they function as a drop.in replacement for `data.frame`s. However tibbles have several advantages over traditional data frames:
+- They print in a more readable format, showing only the first few rows and columns that fit on the screen.
+- They do not convert character vectors to factors by default, which can prevent unexpected
+  behavior.
+- They have better support for non-standard data types, such as lists and nested data frames.
+- They behave more consistently with respect to subsetting and other operations.
+
+Some functions strictly require `data.frame`s as input. In those cases you can convert a tibble to a data frame with `as.data.frame()`.
+
+## 4. Core `dplyr` verbs
+
+The `dplyr` package provides a set of core verbs (functions) for data manipulation. Here are some of the most commonly used ones:
+
+- `select()`: Select specific columns from a data frame.
+```{r}
+diabetes %>%
+  select(Outcome, Glucose, BMI, Age) %>% 
+  head()
+```
+
+- `filter()`: Filter rows based on conditions.
+```{r}
+diabetes %>%
+  filter(BMI > 10) %>% 
+  head()
+
+```
+
+Note that `select` and `filter` have similar roles as the square brackets in base R.
+
+- `mutate()`: Create or transform columns.
+
+```{r}
+diabetes %>%
+  mutate(
+    obese = BMI >= 30,
+    age_group = case_when(
+      Age < 40 ~ "<40",
+      Age < 60 ~ "40–59",
+      TRUE     ~ "60+"
+    )
+  ) %>%
+  head()
+
+```
+
+- `summarise`: Summarize data by calculating summary statistics.
+
+```{r}
+diabetes %>%
+  summarise(
+    mean_glucose = mean(Glucose, na.rm = TRUE),
+    sd_glucose = sd(Glucose, na.rm = TRUE)
+  ) 
+```
+
+- `group_by()`: Group data by one or more variables for grouped operations.
+
+```{r}
+diabetes %>%
+  group_by(Outcome) %>%
+  summarise(
+    mean_glucose = mean(Glucose),
+    sd_glucose   = sd(Glucose),
+    n = n(),
+    .groups = "drop"
+  )
+```
+
+- `count()`: Count occurrences of unique values in a column.
+
+```{r}
+diabetes %>%
+  count(Outcome)
+```
+
+Note that this could also be done with `group_by` and `summarise` as shown above, but `count` is a convenient shorthand.
+
+- `pull()`: Extract a single column as a vector.
+
+The `pull` function is simular to `$` and can be used to extract a variable from a tibble. It is mostly used because it looks better when used in a pipe.
+
+
+## 5. Purrr for subgroup analyses
+
+Purrr is a tidyverse package for functional programming. It provides tools for working with functions, vectors and lists in a more consistent and readable way. One of its key features is the ability to apply functions to lists or vectors using mapping functions like `map()`, `map_dfr()`, and `pmap()`.
+
+In the context of subgroup analyses, `purrr` can be used to apply a modeling function to different subsets of data defined by a grouping variable. For example, we can call the summary function for each outcome group in the diabetes dataset.
+
+```{r}
+diabetes %>%
+  group_split(Outcome) %>%
+  map(\(x) summary(x) )
+
+```
+The code above splits the `diabetes` dataset into subsets based on the `Outcome` variable and then applies the `summary()` function to each subset using `map()`. The results are returned as a list, with each element corresponding to a subgroup.
+
+Note: `\(x) {...}` is a shorthand for `function(x) {...}`).

@@ -1,0 +1,455 @@
+---
+  title: "Practical 2: Gradient Boosting in Epidemiology"
+subtitle: "Tuning, cross-validation, nested CV, and interpretation"
+author: "Sten Willemsen"
+format:
+  html:
+  toc: true
+toc-depth: 3
+execute:
+  echo: true
+warning: false
+message: false
+---
+  
+## Learning objectives
+  
+After this practical, you should be able to:
+  
+- Explain why boosted trees often outperform linear models in prediction tasks
+- Tune key boosting hyperparameters using cross-validation
+- Use **nested cross-validation** to obtain an honest estimate of performance
+- Compare discrimination **and** calibration (important in epidemiology)
+- Reflect on what boosted models can and cannot tell us (prediction ≠ causation)
+
+---
+  
+## 1. Setup
+  
+```{r}
+library(tidymodels)
+library(dplyr)
+library(readr)
+
+set.seed(2025)
+
+
+PKGNAME <- "BigDataAndAI" # <--- CHANGE THIS to your package name
+
+# Helper function to find if we are inside the package source tree
+find_pkg_root <- function(path = getwd()) {
+  # Traverse up directories looking for a DESCRIPTION file
+  while (path != dirname(path)) {
+    if (file.exists(file.path(path, "DESCRIPTION"))) {
+      # Verify it is actually THIS package
+      desc <- tryCatch(read.dcf(file.path(path, "DESCRIPTION")), error = function(e) NULL)
+      if (!is.null(desc) && desc[1, "Package"] == PKGNAME) {
+        return(path)
+      }
+    }
+    path <- dirname(path)
+  }
+  return(NULL)
+}
+
+pkg_root <- find_pkg_root()
+
+if (!is.null(pkg_root) && requireNamespace("devtools", quietly = TRUE)) {
+  # SCENARIO 1: We are developing (inside the source folder)
+  message(sprintf("Development mode: Loading %s from source via load_all()", PKGNAME))
+  devtools::load_all(pkg_root, export_all = FALSE) # export_all=FALSE behaves more like real library
+  
+} else if (requireNamespace(PKGNAME, quietly = TRUE)) {
+  # SCENARIO 2: Student mode (package is installed)
+  message(sprintf("Student mode: Loading installed %s library", PKGNAME))
+  library(PKGNAME, character.only = TRUE)
+  
+} else {
+  # SCENARIO 3: Disaster (Not installed, not in source)
+  stop(sprintf(
+    "The package '%s' is not installed. Please run: remotes::install_github('stenw/%s')",
+    PKGNAME, PKGNAME
+  ))
+}
+
+
+```
+
+Load the prepared NHANES dataset:
+  
+```{r}
+nhanes <- load_nhanes()
+analysis_df <- nhanes %>%
+  select(
+    diabetes,
+    age, sex, race_eth, education, income_pir,
+    bmi,
+    waist_cm,
+    sleep_hours,
+    sbp = sbp_mean,
+    dbp = dbp_mean,
+    glucose_mmol,
+    LBXTC, LBDHDD, LBXTR,
+    LBXSCR, alt, ast,
+    smoking_status,
+    vitD, uric_acid,
+    alcohol,
+    pa_total_weekly, sedentary_min,
+    homa_ir,
+    SIAPROXY, SIAINTRP, DMDMARTL,
+    PHAFSTHR
+  ) %>%
+  filter(!is.na(diabetes))  %>%
+  mutate(
+    # Convert to factor
+    diabetes = factor(diabetes, levels = c("1", "0")) # Force "1" to be first
+  )
+
+missing_frac <- analysis_df %>%
+     summarise(across(
+         everything(),
+         ~ mean(is.na(.))
+     )) %>%
+     pivot_longer(
+         everything(),
+         names_to = "variable",
+         values_to = "fraction_missing"
+     ) %>%
+     arrange(desc(fraction_missing))
+```
+
+  
+## 2. Preprocessing recipe
+  
+Boosted trees are robust to outliers and do not require normalization. While XGBoost can handle missing values natively (by learning a 'default direction' for NAs at each split), we often create explicit missing indicators or impute values to capture 'informative missingness'—cases where the fact that data is missing is itself predictive. While decision trees theoretically handle categories naturally, the R implementation of XGBoost requires a purely numeric input matrix. Therefore, we must still use dummy encoding (one-hot encoding) to convert categorical text into numbers.
+  
+
+```{r}
+boost_recipe <- recipe(diabetes ~ ., data = analysis_df) %>%
+  step_indicate_na(all_predictors()) %>%      
+  step_impute_median(all_numeric_predictors()) %>%
+  step_impute_mode(all_nominal_predictors()) %>%
+  step_zv(all_predictors()) |> 
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) 
+
+boost_recipe
+```
+
+
+  
+## 4. Model specification: Gradient Boosted Trees
+  
+We use `boost_tree()` with engine `"xgboost"`.
+
+Key hyperparameters (intuitive description):
+  
+- `trees`: number of boosting iterations  
+- `learn_rate`: step size (smaller is safer but needs more trees)
+- `tree_depth`: how complex each tree can be
+- `min_n`: minimum data points to split
+- `mtry`: number of predictors considered at each split (controls randomness)
+
+```{r}
+boost_spec <- boost_tree(
+  trees = 500,
+  learn_rate = tune(),
+  tree_depth = tune(),
+  min_n = tune(),
+  mtry = tune()
+) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+boost_spec
+```
+
+
+## 5. Train/test split (for intuition)
+  
+We’ll do a split first for intuition, but the main result will come from **nested CV**.
+
+```{r}
+set.seed(2025)
+split <- initial_split(analysis_df, prop = 0.75)
+train_data <- training(split)
+test_data  <- testing(split)
+```
+
+## 6. Cross-validation for tuning (inner CV)
+  
+To restrict computational time we limit ourself to 3 fold cross validation. When you have more time you can use v=5.
+  
+```{r}
+cv_inner <- vfold_cv(train_data, v = 3)
+```
+
+Workflow:
+  
+```{r}
+boost_wf <- workflow() %>%
+  add_recipe(boost_recipe) %>%
+  add_model(boost_spec)
+
+boost_wf
+```
+
+---
+  
+## 7. Tuning grid (guided)
+  
+We use a **compact** grid to keep runtime reasonable. In practice you might want a larger grid (say 30 or so) or Bayesian optimization. When you have more time and a computer with considerable power, try increasing `grid_size` below. You might also want to increase the number of trees (e.g., to 2000 or 3000) and decrease the learning rate (e.g., to 0.01) accordingly or tune the number of trees.
+
+
+```{r}
+
+# Determine number of variables.
+# First we run `prep` which applies runs preprocessing recipe steps to the training data. Learning any trainable parameters in these steps. Next we run `bake` with `new_data = NULL` to return the preprocessed training data.
+
+prep_tmp <- recipes::prep(boost_recipe, training = train_data)
+p <- ncol(recipes::bake(prep_tmp, new_data = NULL)) - 1  # minus outcome column
+
+grid_size <- 10
+
+
+# grid_space_filling sets up a design (i.e. combinations of the hyperparameters) that "fills" the hyperparameter space as well as possible.
+boost_grid <- grid_space_filling(
+  learn_rate(range = c(-3, -0.5)),  # Step size shrinkage. How much do we learn from each new tree
+  tree_depth(range = c(1L, 6L)), # maximum number of splits per tree
+  min_n(range = c(5L, 50L)), # minimum number of data points in a node required to split further
+  mtry(range = c(2L, max(3L, floor(p * 0.6)))), # number of predictors randomly sampled at each split
+  size = grid_size
+)
+
+boost_grid
+```
+
+
+  
+## 8. Tune the boosted model
+  
+We evaluate both:
+  
+- **ROC AUC** (discrimination)
+- **Brier score** (calibration-oriented loss; lower is better)
+- **The logistic loss** i.e. the likelihood
+
+
+```{r}
+boost_tuned <- tune_grid(
+  boost_wf,
+  resamples = cv_inner,
+  grid = boost_grid,
+  metrics = metric_set(roc_auc, brier_class, mn_log_loss)
+)
+
+boost_tuned
+```
+
+Plot performance vs configurations:
+  
+```{r}
+autoplot(boost_tuned)
+```
+
+Select best configuration (by ROC AUC):
+  
+  ```{r}
+best_boost <- select_best(boost_tuned, "roc_auc")
+best_boost
+```
+
+**Discussion:**  
+  Do you see a trade-off between ROC AUC and Brier score?
+  
+
+## 9. Finalize + evaluate on test set (still optimistic)
+  
+```{r}
+final_boost_wf <- finalize_workflow(boost_wf, best_boost)
+final_boost_fit <- fit(final_boost_wf, train_data)
+
+test_pred <- predict(final_boost_fit, test_data, type = "prob") %>%
+  bind_cols(test_data)
+
+roc_auc(test_pred, truth = diabetes, .pred_1)
+brier_class(test_pred, truth = diabetes, .pred_1)
+```
+
+**Critical question:**  
+  Why is this still an optimistic estimate?
+  
+  ---
+  
+## 10. Nested cross-validation (main result)
+  
+### Concept
+- **Outer CV**: estimates performance
+- **Inner CV**: tunes hyperparameters
+
+```{r}
+cv_outer <- vfold_cv(analysis_df, v = 3)
+```
+
+Nested CV implementation:
+  
+```{r}
+nested_results <- cv_outer %>%
+  mutate(
+    inner_cv = map(splits, ~ vfold_cv(analysis(.x), v = 3)),
+    
+    # tune on inner CV
+    tuned = map(inner_cv, ~
+                  tune_grid(
+                    boost_wf,
+                    resamples = .x,
+                    grid = boost_grid,
+                    metrics = metric_set(roc_auc, brier_class)
+                  )
+    ),
+    
+    # choose best by AUC (you can switch to brier_class if you prefer)
+    best = map(tuned, select_best, "roc_auc"),
+    final_wf = map(best, ~ finalize_workflow(boost_wf, .x)),
+    
+    # fit on outer analysis fold
+    fitted = map2(final_wf, splits, ~ fit(.x, analysis(.y))),
+    
+    # predict on outer assessment fold
+    assessed = map2(
+      fitted, splits,
+      ~ predict(.x, assessment(.y), type = "prob") %>%
+        bind_cols(assessment(.y))
+    ),
+    
+    auc = map_dbl(assessed, roc_auc, truth = diabetes, .pred_1),
+    brier = map_dbl(assessed, brier_class, truth = diabetes, .pred_1)
+  )
+```
+
+Inspect fold results:
+  
+```{r}
+nested_results %>%
+  transmute(fold = id, auc, brier)
+```
+
+Summaries:
+  
+```{r}
+mean(nested_results$auc)
+sd(nested_results$auc)
+
+mean(nested_results$brier)
+sd(nested_results$brier)
+```
+
+**Key takeaway:**  
+  These are your best estimates of out-of-sample performance for boosted trees.
+
+---
+  
+## 11. Calibration check (simple)
+  
+A quick calibration plot using deciles of predicted risk.
+
+```{r}
+calibration_df <- nested_results$assessed %>%
+  bind_rows(.id = "fold") %>%
+  mutate(bin = ntile(.pred_1, 10)) %>%
+  group_by(bin) %>%
+  summarise(
+    mean_pred = mean(.pred_1, na.rm = TRUE),
+    obs_rate  = mean(diabetes == 1, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+calibration_df
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(calibration_df, aes(x = mean_pred, y = obs_rate)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  labs(
+    x = "Mean predicted risk (per decile)",
+    y = "Observed event rate (per decile)",
+    title = "Simple calibration plot (nested CV pooled predictions)"
+  )
+```
+
+**Interpretation question:**  
+  If the points lie systematically above the diagonal, what does that imply?
+  
+  ---
+  
+## 12. Compare with LASSO (optional, quick)
+  
+  This section is optional but useful for discussion.
+
+### LASSO workflow (quick)
+
+```{r}
+lasso_recipe <- recipe(diabetes ~ ., data = analysis_df) %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_impute_mode(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_normalize(all_numeric_predictors())
+
+lasso_spec <- logistic_reg(penalty = tune(), mixture = 1) %>%
+  set_engine("glmnet")
+
+lasso_wf <- workflow() %>%
+  add_recipe(lasso_recipe) %>%
+  add_model(lasso_spec)
+```
+
+Small λ grid:
+  
+  ```{r}
+lambda_grid <- grid_regular(
+  penalty(range = c(-4, 0)),
+  levels = 25
+)
+```
+
+Nested CV for LASSO (AUC only, to keep runtime modest):
+  
+  ```{r}
+set.seed(2025)
+lasso_nested <- cv_outer %>%
+  mutate(
+    inner_cv = map(splits, ~ vfold_cv(analysis(.x), v = 5)),
+    tuned = map(inner_cv, ~ tune_grid(lasso_wf, resamples = .x, grid = lambda_grid,
+                                      metrics = metric_set(roc_auc))),
+    best = map(tuned, select_best, "roc_auc"),
+    final_wf = map(best, ~ finalize_workflow(lasso_wf, .x)),
+    fitted = map2(final_wf, splits, ~ fit(.x, analysis(.y))),
+    assessed = map2(fitted, splits, ~ predict(.x, assessment(.y), type = "prob") %>% bind_cols(assessment(.y))),
+    auc = map_dbl(assessed, roc_auc, truth = diabetes, .pred_1)
+  )
+
+mean(lasso_nested$auc)
+sd(lasso_nested$auc)
+```
+
+**Discussion prompts:**
+  - Which model has higher AUC?
+  - Which model do you expect to be more stable across settings?
+  - Which is easier to communicate to clinicians or policy makers?
+  
+  ---
+  
+## 13. Summary
+  
+- Boosted trees can capture nonlinearities and interactions automatically
+- Tuning is essential; performance varies substantially across hyperparameters
+- **Nested CV** is required for honest performance estimation
+- In epidemiology, always consider:
+  - discrimination *and* calibration
+- transportability across populations
+- prediction vs causal interpretation
+
+
