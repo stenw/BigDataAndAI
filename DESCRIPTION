@@ -1,0 +1,34 @@
+Package: BigDataAndAI
+Title: Course material Machine Learning for Topics in Epidemiology
+Version: 0.0.0.9000
+Authors@R: 
+    person("Sten", "Willemsen", , "s.willemsen@erasmusmc.nl", role = c("aut", "cre"))
+Description: Course material Machine Learning for Topics in Epidemiology
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends: 
+    R (>= 3.5)
+LazyData: true
+Suggests: 
+    dplyr,
+    fastshap,
+    ggplot2,
+    glmnet,
+    lime,
+    purrr,
+    quarto,
+    ranger,
+    rlang,
+    shapviz,
+    tibble,
+    tidymodels,
+    tidyr,
+    torch,
+    xgboost,
+    yardstick
+Imports: 
+    labelled,
+    rstudioapi
+VignetteBuilder: quarto    
