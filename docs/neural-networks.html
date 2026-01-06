@@ -100,7 +100,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#b-more-epochs-early-stopping-conceptual" id="toc-b-more-epochs-early-stopping-conceptual" class="nav-link" data-scroll-target="#b-more-epochs-early-stopping-conceptual">B) More epochs + early stopping (conceptual)</a></li>
   <li><a href="#c-transportability" id="toc-c-transportability" class="nav-link" data-scroll-target="#c-transportability">C) Transportability</a></li>
   </ul></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
   </ul>
 </nav>
 </div>
@@ -616,13 +615,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="reflection-should-we-use-a-neural-network-here" class="level2">
 <h2 class="anchored" data-anchor-id="reflection-should-we-use-a-neural-network-here">10. Reflection: should we use a neural network here?</h2>
-<p>Discuss in groups:</p>
-<ol type="1">
+<p><strong>Questions:</strong>:</p>
+<ul>
+<li>Why do activation functions need to be nonlinear? What would happen if all activations were linear?</li>
+<li>Why does minimizing training loss not guarantee good test performance in neural networks?</li>
 <li>Did the NN clearly outperform LASSO and boosting?</li>
 <li>How sensitive was performance to hyperparameters?</li>
+<li>What will happen if the learning rate is too small or too large.</li>
 <li>What is the interpretability cost?</li>
 <li>What kinds of epidemiological datasets would <em>justify</em> a neural network?</li>
-</ol>
+</ul>
 </section>
 <section id="optional-extensions-if-time" class="level2">
 <h2 class="anchored" data-anchor-id="optional-extensions-if-time">11. Optional extensions (if time)</h2>
@@ -637,16 +639,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="c-transportability" class="level3">
 <h3 class="anchored" data-anchor-id="c-transportability">C) Transportability</h3>
 <p>Train on earlier cycles and test on later cycles (requires cycle-based split).</p>
-<hr>
 </section>
-</section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<ul>
-<li>Neural networks can fit complex patterns but are sensitive to tuning and can overfit easily.</li>
-<li>Honest evaluation requires careful resampling (nested CV).</li>
-<li>In epidemiology, the trade-off between performance and interpretability is often central.</li>
-</ul>
 </section>
 
 </main>
