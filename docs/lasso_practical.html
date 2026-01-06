@@ -280,8 +280,8 @@ $ DMDMARTL        &lt;fct&gt; Married, Married, Married, Never married, Married,
 $ PHAFSTHR        &lt;dbl&gt; NA, NA, 14, 12, NA, NA, 9, 12, 9, 13, NA, 13, NA, 11, …</code></pre>
 </div>
 </div>
-<p><strong>Think:</strong><br>
-- Why might a standard logistic regression struggle with this many correlated predictors, especially in smaller data sets ?</p>
+<p><strong>Questions:</strong><br>
+- Why might a standard logistic regression struggle with this many correlated predictors, especially in smaller data sets ? - NHANES is based on a complex survey design (each individual has a survey weight!). What are the implications of ignoring this for prediction modelling?</p>
 </section>
 <section id="traintest-split" class="level2">
 <h2 class="anchored" data-anchor-id="traintest-split">3. Train/test split</h2>
@@ -549,7 +549,6 @@ Is there a single clearly optimal value of λ?</p>
 </div>
 </div>
 </div>
-<hr>
 </section>
 <section id="nested-cross-validation" class="level2">
 <h2 class="anchored" data-anchor-id="nested-cross-validation">9. Nested cross-validation</h2>
@@ -761,14 +760,14 @@ Is there a single clearly optimal value of λ?</p>
 <section id="summary" class="level2">
 <h2 class="anchored" data-anchor-id="summary">11. Summary</h2>
 <ul>
-<li>LASSO reduces variance but does not eliminate overfitting</li>
 <li>Tuning must be done via cross-validation</li>
 <li>Performance estimation can be done in an independent test set or ideally by <strong>nested cross validation</strong>.</li>
-<li>Variable selection is not causal inference</li>
 </ul>
-<p>In the next practical, we will compare LASSO with <strong>tree-based boosting models</strong> using the <em>same dataset and evaluation strategy</em>.</p>
-<p><strong>Question:</strong><br>
-Change the mixture parameter to 0. What kind of model does this correspond to?</p>
+<p>In the next practical, we will compare LASSO with <strong>tree-based boosting models</strong></p>
+<p><strong>Questions:</strong> <strong>Question:</strong> * Many predictors in NHANES (e.g.&nbsp;smoking, alcohol use, physical activity) are self-reported. - Why might questionnaire-based variables still be useful for prediction, even if they are measured with error? - Why does the same measurement error pose a greater problem for causal interpretation?</p>
+<ul>
+<li>Change the mixture parameter to 0. What kind of model does this correspond to?</li>
+</ul>
 </section>
 
 </main>

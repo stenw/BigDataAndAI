@@ -130,8 +130,9 @@ missing_frac <- analysis_df %>%
 glimpse(analysis_df)
 ```
 
-**Think:**  
+**Questions:**  
 - Why might a standard logistic regression struggle with this many correlated predictors, especially in smaller data sets ?
+- NHANES is based on a complex survey design (each individual has a survey weight!). What are the implications of ignoring this for prediction modelling?
   
 ## 3. Train/test split 
 
@@ -351,7 +352,6 @@ test_pred %>%
 ```
 
   
----
   
 ## 9. Nested cross-validation
 
@@ -490,13 +490,17 @@ sort(table(unlist(selected_vars)), decreasing = TRUE)
   
 ## 11. Summary
   
-- LASSO reduces variance but does not eliminate overfitting
 - Tuning must be done via cross-validation
 - Performance estimation can be done in an independent test set or ideally by **nested cross validation**.
-- Variable selection is not causal inference
-
-In the next practical, we will compare LASSO with **tree-based boosting models** using the *same dataset and evaluation strategy*.
 
 
-**Question:**  
-  Change the mixture parameter to 0. What kind of model does this correspond to?
+In the next practical, we will compare LASSO with **tree-based boosting models** 
+
+
+**Questions:**
+  **Question:**
+*  Many predictors in NHANES (e.g. smoking, alcohol use, physical activity) are self-reported.
+  - Why might questionnaire-based variables still be useful for prediction, even if they are measured with error?
+  - Why does the same measurement error pose a greater problem for causal interpretation?
+
+*  Change the mixture parameter to 0. What kind of model does this correspond to?

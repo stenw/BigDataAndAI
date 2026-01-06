@@ -121,7 +121,7 @@ missing_frac <- analysis_df %>%
   
 ## 2. Preprocessing recipe
   
-Boosted trees are robust to outliers and do not require normalization. While XGBoost can handle missing values natively (by learning a 'default direction' for NAs at each split), we often create explicit missing indicators or impute values to capture 'informative missingness'—cases where the fact that data is missing is itself predictive. While decision trees theoretically handle categories naturally, the R implementation of XGBoost requires a purely numeric input matrix. Therefore, we must still use dummy encoding (one-hot encoding) to convert categorical text into numbers.
+Boosted trees are robust to outliers and do not require normalization. While XGBoost can handle missing values natively, we often create explicit missing indicators or impute values to capture 'informative missingness'—cases where the fact that data is missing is itself predictive. While decision trees theoretically handle categories naturally, the R implementation of XGBoost requires a purely numeric input matrix. Therefore, we must still use dummy encoding (one-hot encoding) to convert categorical text into numbers.
   
 
 ```{r}
@@ -135,6 +135,8 @@ boost_recipe <- recipe(diabetes ~ ., data = analysis_df) %>%
 boost_recipe
 ```
 
+**Question:**
+  - Why is scaling not needed here?
 
   
 ## 4. Model specification: Gradient Boosted Trees
@@ -245,11 +247,7 @@ boost_tuned <- tune_grid(
 boost_tuned
 ```
 
-Plot performance vs configurations:
-  
-```{r}
-autoplot(boost_tuned)
-```
+
 
 Select best configuration (by ROC AUC):
   
@@ -258,8 +256,8 @@ best_boost <- select_best(boost_tuned, metric="mn_log_loss")
 best_boost
 ```
 
-**Discussion:**  
-  Do you see a trade-off between ROC AUC and Brier score?
+**Question:**  
+  Examine the structure of the resulting object. 
   
 
 ## 9. Finalize + evaluate on test set (still optimistic)
@@ -342,10 +340,17 @@ mean(nested_results$brier)
 sd(nested_results$brier)
 ```
 
-**Key takeaway:**  
-  These are your best estimates of out-of-sample performance for boosted trees.
+ 
+These are your best estimates of out-of-sample performance for boosted trees.
 
----
+**Question:**
+  - Why are regression trees considered unstable estimators? How does this motivate ensemble methods?
+  - Why are predictions from a gradient boosted regression trees piecewise constant? What does this imply about smoothness and extrapolation?
+  - Why do we usually only need shallow trees in gradient boosting. is the same true for random forests?
+  - When would you prefer logistic regression over gradient boosted trees? What if we use P-splines?
+
+
+
   
 ## 11. Calibration check (simple)
   
@@ -434,18 +439,17 @@ mean(lasso_nested$auc)
 sd(lasso_nested$auc)
 ```
 
-**Discussion prompts:**
+**Questions:**
   - Which model has higher AUC?
-  - Which model do you expect to be more stable across settings?
   - Which is easier to communicate to clinicians or policy makers?
+  - How would you investigate transportability?
   
-  ---
   
 ## 13. Summary
   
 - Boosted trees can capture nonlinearities and interactions automatically
 - Tuning is essential; performance varies substantially across hyperparameters
-- **Nested CV** is required for honest performance estimation
+- **Nested CV** or an independent test set is required for honest performance estimation
 - In epidemiology, always consider:
   - discrimination *and* calibration
 - transportability across populations

@@ -12,6 +12,8 @@ execute:
   message: false
 ---
 
+
+
 ## Learning objectives
 
 After this practical, you should be able to:
@@ -25,6 +27,8 @@ After this practical, you should be able to:
 ---
 
 ## 1. Setup
+
+
 
 ```{r}
 library(dplyr)
@@ -78,17 +82,25 @@ if (!is.null(pkg_root) && requireNamespace("devtools", quietly = TRUE)) {
 
 ```
 
+
+
 Load the dataset:
+
+
 
 ```{r}
 nhanes <- load_nhanes()
 ```
+
+
 
 ---
 
 ## 2. Define outcome and predictors
 
 We use the same broad predictor set as the LASSO/boosting practicals.
+
+
 
 ```{r}
 analysis_df <- nhanes %>%
@@ -131,7 +143,11 @@ missing_frac <- analysis_df %>%
 ```
 
 
+
+
 ## 3. Preprocessing
+
+
 
 
 ```{r}
@@ -146,6 +162,8 @@ nn_recipe <- recipe(diabetes ~ ., data = analysis_df) %>%
 
 ```
 
+
+
 ---
 
 ## 4. Utilities: recipe -> torch tensors
@@ -153,6 +171,8 @@ nn_recipe <- recipe(diabetes ~ ., data = analysis_df) %>%
 When we want to use torch to estimate neural networks in combination with the tidymodels methodology we need to take a few extra steps in comparison with the lasso and boosting models we used before. We are required to write a fuction (we call it `bake_xy` here) that takes a recipe and (training / test) data frames as input and returns the design matrices/vectors for training and testing.
 We also create the function `to_tensor` which converts those matrices to 'torch tensors' which are are special 'arrays' that are used by torch as input format for neural networks. 
 Finally we create a function `make_loader` which creates a 'dataloader' object from the tensors. A dataloader is an object that allows us to iterate over the data in mini-batches during training.
+
+
 
 ```{r}
 bake_xy <- function(rec, train_df, test_df) {
@@ -187,6 +207,8 @@ make_loader <- function(x, y, batch_size = 128, shuffle = TRUE) {
 ```
 
 
+
+
 ## 5. Define a simple neural network (MLP)
 
 We use a small MLP for binary classification:
@@ -194,6 +216,8 @@ We use a small MLP for binary classification:
 - input layer -> hidden layer -> hidden layer -> output
 - dropout for regularization
 - We use `BCEWithLogitsLoss` that combines the sigmoid function with the Binary Cross-Entropy Loss for stability (we output logits). Note that the Binary Cross-Entropy Loss and the logistic loss are equivalent to the negative log-likelihood.
+
+
 
 ```{r}
 mlp_net <- nn_module(
@@ -218,6 +242,8 @@ mlp_net <- nn_module(
 )
 ```
 
+
+
 ---
 
 ## 6. Training + evaluation functions
@@ -228,6 +254,8 @@ These functions:
 - train for a fixed number of epochs
 - evaluate on validation data
 - return predicted probabilities + AUC + Brier score
+
+
 
 ```{r}
 train_one <- function(x_train, y_train, x_val, y_val,
@@ -292,11 +320,15 @@ train_one <- function(x_train, y_train, x_val, y_val,
 }
 ```
 
+
+
 ---
 
 ## 7. Quick sanity check: one train/test split
 
 This is just for intuition. The main result will come from nested CV later.
+
+
 
 ```{r}
 set.seed(2025)
@@ -307,14 +339,22 @@ test_df  <- testing(split)
 xy <- bake_xy(nn_recipe, train_df, test_df)
 ```
 
+
+
 Choose device (GPU if available):
+
+
 
 ```{r}
 device <- if (cuda_is_available()) torch_device("cuda") else torch_device("cpu")
 device
 ```
 
+
+
 Train one model (default settings):
+
+
 
 ```{r}
 res_split <- train_one(
@@ -333,6 +373,8 @@ res_split$brier
 ```
 
 
+
+
 ## 8. Cross-validation for tuning (inner CV)
 
 We will tune a small set of hyperparameters:
@@ -345,12 +387,18 @@ To keep runtime reasonable, we do **3-fold inner CV** and a **small grid**.
 
 > If your laptop is slow: reduce `grid` or reduce `epochs`.
 
+
+
 ```{r}
 set.seed(2025)
 cv_inner <- vfold_cv(analysis_df, v = 3)
 ```
 
+
+
 Define a small hyperparameter grid:
+
+
 
 ```{r}
 grid <- tidyr::crossing(
@@ -364,7 +412,11 @@ grid <- tidyr::crossing(
 grid
 ```
 
+
+
 Function to score one configuration via CV:
+
+
 
 ```{r}
 cv_score_config <- function(cfg, folds, epochs = 25, batch_size = 128, device = torch_device("cpu")) {
@@ -399,7 +451,11 @@ cv_score_config <- function(cfg, folds, epochs = 25, batch_size = 128, device = 
 }
 ```
 
+
+
 Run CV tuning:
+
+
 
 ```{r}
 device <- if (cuda_is_available()) torch_device("cuda") else torch_device("cpu")
@@ -412,12 +468,18 @@ tuning_results <- purrr::pmap_dfr(grid, function(hidden1, hidden2, dropout, lr) 
 tuning_results %>% arrange(desc(mean_auc))
 ```
 
+
+
 Select the best:
+
+
 
 ```{r}
 best_cfg <- tuning_results %>% arrange(desc(mean_auc)) %>% slice(1)
 best_cfg
 ```
+
+
 
 
 ## 9. Lightweight nested cross-validation (main result)
@@ -429,12 +491,18 @@ best_cfg
 
 To keep it feasible during class, we use **3 outer folds** and **3 inner folds**, and the small grid.
 
+
+
 ```{r}
 set.seed(2025)
 cv_outer <- vfold_cv(analysis_df, v = 3)
 ```
 
+
+
 Nested CV:
+
+
 
 ```{r}
 nested <- cv_outer %>%
@@ -476,6 +544,8 @@ sd(nested$auc)
 ```
 
 
+
+
 ## 10. Reflection: should we use a neural network here?
 
 **Questions:**:
@@ -501,5 +571,6 @@ Train longer, but stop when validation AUC stops improving.
 
 ### C) Transportability
 Train on earlier cycles and test on later cycles (requires cycle-based split).
+
 
 

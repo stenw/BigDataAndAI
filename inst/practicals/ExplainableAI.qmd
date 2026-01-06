@@ -392,21 +392,12 @@ sv_waterfall(sv_local, row_id = 3)
 We use the function `sv_waterfall`. The bottom of the plot starts at the average model prediction (base value). The top of the plot shows the actual model prediction for the specified observation. Each variable is represented by a bar that either moves the prediction up (increases the predicted probability) or down (decreases the predicted probability). The length of each bar indicates the magnitude of the effect.  
 
 **Questions:**
-1. For each case: which 2–3 features push risk **up** the most? Which push risk **down**?
-2. Compare the SHAP explanation for the “boundary” case vs the “high-risk” case.
-3. Do SHAP and LIME tell a consistent story? If not, why might they differ?
-
----
-
-## 9. Critical pitfalls (epidemiology lens)
-
-Answer briefly:
-
-1. **Correlation problem:** If BMI and waist are correlated, how can credit assignment become misleading?
-2. **Causality trap:** Why is it incorrect to interpret a positive SHAP value as a causal risk factor?
-3. **Stability:** If you rerun `fastshap::explain()` with a different seed or different `nsim`, what changes? (Optional experiment: rerun with `nsim = 20` and compare.)
-
----
+ * For each case: which 2–3 features push risk **up** the most? Which push risk **down**?
+ * Compare the SHAP explanation for the “boundary” case vs the “high-risk” case.
+ * Do SHAP and LIME tell a consistent story? If not, why might they differ?
+ * **Causality trap:** Why is it incorrect to interpret a positive SHAP value as a causal risk factor?
+ * **Stability:** If you rerun `fastshap::explain()` with a different seed or different `nsim`, what changes? (Optional experiment: rerun with `nsim = 20` and compare.)
+  
 
 ## 10. Summary
 
