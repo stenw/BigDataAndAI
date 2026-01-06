@@ -489,7 +489,7 @@ sd(nested$auc)
 - What kinds of epidemiological datasets would *justify* a neural network?
 
 
-## 11. Optional extensions (if time)
+## 11. Optional extensions (if you have time)
 
 ### A) Stronger regularization
 Try:
